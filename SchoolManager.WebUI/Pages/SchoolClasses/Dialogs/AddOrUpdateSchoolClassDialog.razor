@@ -1,0 +1,137 @@
+﻿@using FluentValidation;
+@using SchoolManager.WebUI.Models.SchoolClasses;
+@using SchoolManager.WebUI.Models.Students;
+@using SchoolManager.WebUI.Extensions;
+@using SchoolManager.WebUI.Models;
+@inject HttpClient Http
+@inject IDialogService DialogService
+
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        @if (isUpdate)
+        {
+            <MudText Typo="Typo.h6">
+                <MudIcon Icon="@Icons.Material.Filled.Update" Class="mr-3 mb-n1" />
+                Atualize a Turma
+            </MudText>
+        }
+        else
+        {
+            <MudText Typo="Typo.h6">
+                <MudIcon Icon="@Icons.Material.Filled.Add" Class="mr-3 mb-n1" />
+                Cadastre a Turma
+            </MudText>
+        }
+
+    </TitleContent>
+    <DialogContent>
+        <MudForm Model="@schoolClass" @ref="@form" Validation="schoolClassValidator.ValidateValue" ValidationDelay="0">
+            <MudTextField T="string" @bind-Value="@schoolClass.ClassName" For="@(() => schoolClass.ClassName)" Label="Nome da Turma" Immediate="true" />
+            <MudTextField T="int?" @bind-Value="@schoolClass.CourseId" For="@(() => schoolClass.CourseId)" Label="Código do Curso" Immediate="true" />
+            <MudTextField T="int?" @bind-Value="@schoolClass.Year" For="@(() => schoolClass.Year)" Label="Ano" Immediate="true" />
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancelar</MudButton>
+        <MudButton Color="Color.Error" OnClick="SaveSchoolClass">Salvar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    MudForm form;
+
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; }
+
+    [Parameter] public SchoolClassViewModel schoolClass { get; set; } = new SchoolClassViewModel();
+    [Parameter] public bool isUpdate { get; set; }
+
+    SchoolClassValidator schoolClassValidator = new();
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private async Task SaveSchoolClass()
+    {
+        await form.Validate();
+        if (!form.IsValid)
+            return;
+
+        var schoolClassRequest = new SchoolClassBaseModel(schoolClass.CourseId, schoolClass.ClassName!, schoolClass.Year);
+        if (isUpdate)
+        {
+            var updateResult = await Http.PutAsJsonAsync($"schoolclass/{schoolClass!.Id}", schoolClassRequest);
+            if (updateResult.IsSuccessStatusCode)
+            {
+                Snackbar.Add("Turma Atualizada", MudBlazor.Severity.Success);
+                MudDialog.Close(DialogResult.Ok(schoolClass));
+                return;
+            }
+
+            await ShowError(updateResult);
+
+            return;
+        }
+
+        var createResult = await Http.PostAsJsonAsync("schoolclass/", schoolClassRequest);
+        if (createResult.IsSuccessStatusCode)
+        {
+            var schoolClassCreated = await createResult.Content.ReadFromJsonAsync<SchoolClassViewModel>();
+
+            Snackbar.Add("Turma Cadastrada", MudBlazor.Severity.Success);
+            MudDialog.Close(DialogResult.Ok(schoolClassCreated));
+
+            return;
+        }
+
+        await ShowError(createResult);
+    }
+
+    private async Task ShowError(HttpResponseMessage result)
+    {
+        var parameters = new DialogParameters();
+        parameters.Add("Color", Color.Error);
+
+        List<string> listErrors = new();
+
+        var errorsModel = await result.Content.ReadFromJsonAsync<ErrorModel>();
+
+        var validationErrors = errorsModel!.ValidationErrors is not null ? errorsModel!.ValidationErrors?.Select(e => e.ErrorMessage) : Array.Empty<string>();
+        listErrors.AddRange(validationErrors!);
+        listErrors.AddRange(errorsModel!.Errors ?? Array.Empty<string>());
+
+        parameters.Add("Errors", listErrors!.ToArray());
+
+        await DialogService.Show<ErrorDialog>("Erro!", parameters).Result;
+    }
+
+    internal class SchoolClassValidator : AbstractValidator<SchoolClassBaseModel>
+    {
+        public SchoolClassValidator()
+        {
+            RuleFor(p => p.CourseId)
+            .NotEmpty().WithMessage("O Curso é obrigatório")
+            .GreaterThan(0).WithMessage("O Curso é obrigatório");
+
+            RuleFor(p => p.ClassName)
+                .NotEmpty().WithMessage("O Nome da Turma é obrigatório")
+                .MaximumLength(45).WithMessage("O Nome da Turma deve conter no máximo 45 caracteres");
+
+            RuleFor(p => p.Year)
+                .NotEmpty().WithMessage("O Curso é obrigatório")
+                .GreaterThanOrEqualTo(DateTime.Now.Year).WithMessage("Selecione um Ano maior ou igual ao atual");
+        }
+
+        public Func<object, string, Task<IEnumerable<string>>> ValidateValue => async (model, propertyName) =>
+        {
+            var result = await ValidateAsync(ValidationContext<SchoolClassBaseModel>.CreateWithOptions((SchoolClassBaseModel)model, x => x.IncludeProperties(propertyName)));
+            if (result.IsValid)
+                return Array.Empty<string>();
+
+            return result.Errors.Select(e => e.ErrorMessage);
+        };
+    }
+}

@@ -1,0 +1,134 @@
+﻿@page "/schoolclasses"
+@using SchoolManager.WebUI.Models.SchoolClasses;
+@using SchoolManager.WebUI.Pages.SchoolClasses.Dialogs;
+@using System.Text.Json;
+@using System.Text.Json.Serialization;
+@inject HttpClient Http
+@inject IDialogService DialogService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Turmas</PageTitle>
+
+<MudText Typo="Typo.h3" GutterBottom="true">Turmas</MudText>
+<MudText Class="mb-8">Aqui você poderá ver a listagem de todas as Turmas cadastrados, e realizar operações.</MudText>
+
+
+<MudTable Items="classes" Hover="true" SortLabel="Sort By" Elevation="0" Loading="@_loading" Filter="new Func<SchoolClassViewModel, bool>(FilterFunc)">
+    <ToolBarContent>
+        <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Style="float: left" @onclick="CreateSchoolClass">Cadastrar Turma</MudButton>
+
+        <MudSpacer />
+        <MudTextField @bind-Value="searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+    </ToolBarContent>
+    <HeaderContent>
+        <MudTh Style="width: 35%"><MudTableSortLabel InitialDirection="SortDirection.Ascending" SortBy="new Func<SchoolClassViewModel, object>(x=>x.ClassName!)">Turma</MudTableSortLabel></MudTh>
+        <MudTh Style="width: 15%"><MudTableSortLabel SortBy="new Func<SchoolClassViewModel, object>(x=>x.CourseId!)">Curso</MudTableSortLabel></MudTh>
+        <MudTh Style="width: 15%"><MudTableSortLabel SortBy="new Func<SchoolClassViewModel, object>(x=>x.Year!)">Ano</MudTableSortLabel></MudTh>
+        <MudTh></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Turma">@context.ClassName</MudTd>
+        <MudTd DataLabel="Curso">@context.CourseId</MudTd>
+        <MudTd DataLabel="Ano">@context.Year</MudTd>
+        <MudTd Style="text-align: end;">
+            <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Edit" Color="Color.Warning" Style="margin-right: 5px" @onclick="() => UpdateSchoolClass(context.Id)">Editar</MudButton>
+            <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Delete" Color="Color.Error" Style="margin-right: 5px" @onclick="() => DeleteSchoolClass(context.Id)">Deletar</MudButton>
+            <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.OpenInNew" Color="Color.Primary" @onclick="() => VerAlunos(context.Id)">Alunos</MudButton>
+        </MudTd>
+    </RowTemplate>
+    <PagerContent>
+        <MudTablePager PageSizeOptions="new int[]{5, 10, 25, 50}" />
+    </PagerContent>
+</MudTable>
+
+
+@code {
+    private bool _loading = false;
+    private List<SchoolClassViewModel>? classes = new();
+    private string searchString = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _loading = true;
+        classes = await Http.GetFromJsonAsync<List<SchoolClassViewModel>>("schoolclass/");
+        _loading = false;
+    }
+
+    private bool FilterFunc(SchoolClassViewModel element) => FilterFunc(element, searchString);
+
+    private bool FilterFunc(SchoolClassViewModel element, string searchString)
+    {
+        if (string.IsNullOrWhiteSpace(searchString))
+            return true;
+        if (element.CourseId.ToString().Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (element.ClassName.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (element.Year.ToString().Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if ($"{element.CourseId} {element.ClassName} {element.Year}".Contains(searchString))
+            return true;
+        return false;
+    }
+
+    public DialogOptions GetDialogOptions()
+    {
+        return new DialogOptions() { MaxWidth = MaxWidth.Small, FullWidth = true };
+    }
+
+    private async Task CreateSchoolClass()
+    {
+        var parameters = new DialogParameters();
+        parameters.Add("schoolClass", new SchoolClassViewModel());
+        parameters.Add("isUpdate", false);
+
+        var dialogResult = await DialogService.Show<AddOrUpdateSchoolClassDialog>("Cadastrar Turma", GetDialogOptions()).Result;
+        if (dialogResult.Data == null)
+            return;
+
+        var createdStudent = dialogResult.Data as SchoolClassViewModel;
+        classes!.Insert(0, createdStudent!);
+    }
+
+    private async Task UpdateSchoolClass(int classId)
+    {
+        var schoolClass = (classes!.FirstOrDefault(schoolClass => schoolClass.Id == classId))!;
+
+        var parameters = new DialogParameters();
+        parameters.Add("schoolClass", schoolClass);
+        parameters.Add("isUpdate", true);
+
+        var dialogResult = await DialogService.Show<AddOrUpdateSchoolClassDialog>("Atualizar Turma", parameters, GetDialogOptions()).Result;
+        if (dialogResult.Data == null)
+            return;
+
+        var updatedClass= dialogResult.Data as SchoolClassViewModel;
+
+        classes!.Remove(schoolClass);
+        classes!.Insert(0, updatedClass!);
+    }
+
+    private async Task DeleteSchoolClass(int studentId)
+    {
+        var parameters = new DialogParameters();
+        parameters.Add("ContentText", "Tem certeza de que deseja excluir essa Turma?");
+        parameters.Add("SecondaryText", "Essa ação não pode ser desfeita.");
+        parameters.Add("ButtonText", "Deletar");
+        parameters.Add("Color", Color.Error);
+
+        var options = new DialogOptions() { CloseButton = true, MaxWidth = MaxWidth.ExtraSmall };
+
+        var dialogResult = await DialogService.Show<DeleteRegisterDialog>("Deletar", parameters, options).Result;
+
+        if (dialogResult.Cancelled)
+            return;
+
+        await Http.DeleteAsync($"schoolclass/{studentId}");
+        classes!.RemoveAll(student => student.Id == studentId);        
+    }
+
+    private void VerAlunos(int classId)
+    {
+        NavigationManager.NavigateTo($"/classstudents/{classId}");
+    }
+}

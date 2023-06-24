@@ -1,0 +1,108 @@
+﻿@using FluentValidation;
+@using SchoolManager.WebUI.Models.SchoolClasses;
+@using SchoolManager.WebUI.Models.Students;
+@using SchoolManager.WebUI.Extensions;
+@using SchoolManager.WebUI.Models;
+@using System.ComponentModel.DataAnnotations;
+@inject HttpClient Http
+@inject IDialogService DialogService
+
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Add" Class="mr-3 mb-n1" />
+            Adicione o Aluno
+        </MudText>     
+    </TitleContent>
+    <DialogContent>
+
+        <EditForm Model="@StudentToClass" OnValidSubmit="OnValidSubmit">
+            <DataAnnotationsValidator />
+            <MudSelect 
+                AnchorOrigin="Origin.BottomCenter"                     
+                Label="Alunos"                 
+                @bind-Value="StudentToClass!.StudentId" 
+                For="@(() => StudentToClass!.StudentId)">
+
+                @foreach (var student in Students!)
+                {
+                    <MudSelectItem Value="@(student.Id.ToString())">@student.Name</MudSelectItem>
+                }
+            </MudSelect>
+            <MudContainer Style="margin: 30px 0 5px; text-align: end; padding-right: 0px;">
+                <MudButton OnClick="Cancel">Cancelar</MudButton>
+                <MudButton ButtonType="ButtonType.Submit" Color="Color.Success" OnClick="AddStudentToClass">Adicionar</MudButton>
+            </MudContainer>
+
+        </EditForm>
+    </DialogContent>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; }
+
+    bool success;
+
+    [Parameter] public StudentToClassModel? StudentToClass { get; set; }
+    [Parameter] public List<StudentViewModel>? Students { get; set; } = new();
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private async Task AddStudentToClass()
+    {
+        if (string.IsNullOrWhiteSpace(StudentToClass!.StudentId))
+            return;
+
+        var result = await Http.PostAsync($"schoolclass/{StudentToClass!.SchoolClassId}/addstudent/{StudentToClass!.StudentId}", null);
+        if (result.IsSuccessStatusCode)
+        {
+            Snackbar.Add("Aluno Adicionado", MudBlazor.Severity.Success);
+            MudDialog.Close(DialogResult.Ok(StudentToClass.StudentId));
+
+            return;
+        }
+
+        await ShowError(result);
+    }
+
+    private async Task ShowError(HttpResponseMessage result)
+    {
+        var parameters = new DialogParameters();
+        parameters.Add("Color", Color.Error);
+
+        List<string> listErrors = new();
+
+        var errorsModel = await result.Content.ReadFromJsonAsync<ErrorModel>();
+
+        var validationErrors = errorsModel!.ValidationErrors is not null ? errorsModel!.ValidationErrors?.Select(e => e.ErrorMessage) : Array.Empty<string>();
+        listErrors.AddRange(validationErrors!);
+        listErrors.AddRange(errorsModel!.Errors ?? Array.Empty<string>());
+
+        parameters.Add("Errors", listErrors!.ToArray());
+
+        await DialogService.Show<ErrorDialog>("Erro!", parameters).Result;
+    }
+
+    public class StudentToClassModel
+    {
+        [Required(ErrorMessage = "Por favor, selecione um aluno!")]
+        public string? StudentId { get; set; }
+        public string? SchoolClassId { get; set; }
+
+        public StudentToClassModel(string schoolClassId)
+        {
+            SchoolClassId = schoolClassId;
+        }
+    }
+
+    private void OnValidSubmit(EditContext context)
+    {
+        success = true;
+        StateHasChanged();
+    }
+}

@@ -1,0 +1,141 @@
+﻿@using FluentValidation;
+@using SchoolManager.WebUI.Models.Students;
+@using SchoolManager.WebUI.Extensions;
+@using SchoolManager.WebUI.Models;
+@inject HttpClient Http
+@inject IDialogService DialogService
+
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        @if (isUpdate)
+        {
+            <MudText Typo="Typo.h6">
+                <MudIcon Icon="@Icons.Material.Filled.Update" Class="mr-3 mb-n1" />
+                Atualize o Aluno
+            </MudText>
+        }
+        else
+        {
+            <MudText Typo="Typo.h6">
+                <MudIcon Icon="@Icons.Material.Filled.Add" Class="mr-3 mb-n1" />
+                Cadastre o Aluno
+            </MudText>
+        }
+
+    </TitleContent>
+    <DialogContent>
+        <MudForm Model="@student" @ref="@form" Validation="studentValidator.ValidateValue" ValidationDelay="0">
+            <MudTextField T="string" @bind-Value="@student.Name" For="@(() => student.Name)" Label="Nome" Immediate="true" />
+            <MudTextField T="string" @bind-Value="@student.User" For="@(() => student.User)" Label="Usuário" Immediate="true" />
+            <MudTextField T="string" @bind-Value="@student.Password" For="@(() => student.Password)" Label="Senha" Immediate="true" />
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancelar</MudButton>
+        <MudButton Color="Color.Error" OnClick="SaveStudent">Salvar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    MudForm form;
+
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; }
+
+    [Parameter] public StudentViewModel student { get; set; } = new StudentViewModel();
+    [Parameter] public bool isUpdate { get; set; }
+
+    StudentCommandValidator studentValidator = new();
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private async Task SaveStudent()
+    {
+        await form.Validate();
+        if (!form.IsValid)
+            return;
+
+        var studentRequest = new StudentBaseModel(student.Name!, student.User!, student.Password!);
+        if (isUpdate)
+        {
+            var updateResult = await Http.PutAsJsonAsync($"student/{student!.Id}", studentRequest);
+            if (updateResult.IsSuccessStatusCode)
+            {
+                Snackbar.Add("Aluno Atualizado", MudBlazor.Severity.Success);
+                MudDialog.Close(DialogResult.Ok(student));
+                return;
+            }
+
+            await ShowError(updateResult);
+
+            return;
+        }
+
+        var createResult = await Http.PostAsJsonAsync("student/", studentRequest);
+        if (createResult.IsSuccessStatusCode)
+        {
+            var studentCreated = await createResult.Content.ReadFromJsonAsync<StudentViewModel>();
+
+            Snackbar.Add("Aluno Cadastrado", MudBlazor.Severity.Success);
+            MudDialog.Close(DialogResult.Ok(studentCreated));
+
+            return;
+        }
+
+        await ShowError(createResult);
+    }
+
+    private async Task ShowError(HttpResponseMessage result)
+    {
+        var parameters = new DialogParameters();
+        parameters.Add("Color", Color.Error);
+
+        List<string> listErrors = new();
+
+        var errorsModel = await result.Content.ReadFromJsonAsync<ErrorModel>();
+
+        var validationErrors = errorsModel!.ValidationErrors  is not null ? errorsModel!.ValidationErrors?.Select(e => e.ErrorMessage) : Array.Empty<string>();
+        listErrors.AddRange(validationErrors!);
+        listErrors.AddRange(errorsModel!.Errors ?? Array.Empty<string>());
+
+        parameters.Add("Errors", listErrors!.ToArray());
+
+        await DialogService.Show<ErrorDialog>("Erro!", parameters).Result;
+    }
+
+    internal class StudentCommandValidator : AbstractValidator<StudentBaseModel>
+    {
+        public StudentCommandValidator()
+        {
+            RuleFor(p => p.Name)
+                .NotEmpty().WithMessage("O Nome é obrigatório")
+                .MaximumLength(255).WithMessage("O Nome deve conter no máximo 255 caracteres");
+
+            RuleFor(p => p.User)
+                .NotEmpty().WithMessage("O Usuário é obrigatório")
+                .MaximumLength(45).WithMessage("O Usuário deve conter no máximo 45 caracteres");
+
+            RuleFor(p => p.Password)
+                .NotEmpty().WithMessage("A Senha é obrigatório")
+                .MinimumLength(8).WithMessage("Sua Senha deve ter pelo menos 8 caracteres")
+                .MaximumLength(20).WithMessage("Sua Senha deve ter no máximo 20 caracteres")
+                .Must(password => password.ContainsUppercase()).WithMessage("Sua Senha deve conter pelo menos uma letra maiúscula")
+                .Must(password => password.ContainsLowercase()).WithMessage("Sua Senha deve conter pelo menos uma letra minúscula")
+                .Must(password => password.ContainsNumber()).WithMessage("Sua Senha deve conter pelo menos um número")
+                .Must(password => password.ContainsSpecialCharacter()).WithMessage("Sua senha deve conter pelo menos um caractere especial");
+        }
+
+        public Func<object, string, Task<IEnumerable<string>>> ValidateValue => async (model, propertyName) =>
+        {
+            var result = await ValidateAsync(ValidationContext<StudentBaseModel>.CreateWithOptions((StudentBaseModel)model, x => x.IncludeProperties(propertyName)));
+            if (result.IsValid)
+                return Array.Empty<string>();
+
+            return result.Errors.Select(e => e.ErrorMessage);
+        };
+    }   
+}

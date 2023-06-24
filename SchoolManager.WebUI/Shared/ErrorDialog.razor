@@ -1,0 +1,34 @@
+﻿<MudDialog>
+    <DialogContent>
+        @if (Errors.Length == 1)
+        {
+            <MudText>@Errors[0]</MudText>
+        }
+        else
+        {
+            <MudText>Ocorreram os seguintes erros:</MudText>
+            <br />
+            @foreach (string erro in Errors)
+            {
+                <MudText>@erro</MudText>
+            }
+        }
+
+        <br />
+    </DialogContent>
+    <DialogActions>
+        <MudButton Style="margin-bottom: 5px" Color="@Color" Variant="Variant.Filled" OnClick="Submit">Ok</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; }
+
+    [Parameter] public string[] Errors { get; set; }
+
+    [Parameter] public Color Color { get; set; }
+
+    private void Submit() => MudDialog.Close(DialogResult.Ok(true));
+
+    private void Cancel() => MudDialog.Cancel();
+}
