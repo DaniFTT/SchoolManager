@@ -9,7 +9,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SchoolManager.Domain", "Sch
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SchoolManager.Application", "SchoolManager.Application\SchoolManager.Application.csproj", "{0B1B9841-972A-446D-BB9D-25BD717AF0C9}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "2 - Presentation", "2 - Presentation", "{4B075DEE-382D-48EA-A957-E4F46F2E0500}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "2 - API", "2 - API", "{4B075DEE-382D-48EA-A957-E4F46F2E0500}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "3 - Application", "3 - Application", "{7D6180C0-4C01-404C-9D5F-3B2EC1E93316}"
 EndProject
